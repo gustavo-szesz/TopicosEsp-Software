@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% block content %}
+  <div class="row">
+    <div class="col-md-4">
+      <h5>Upload CSV</h5>
+      <form action="/upload" method="post" enctype="multipart/form-data">
+        <div class="mb-3">
+          <input class="form-control" type="file" name="csv_file" accept=".csv">
+        </div>
+        <button class="btn btn-primary" type="submit">Enviar</button>
+      </form>
+
+      <hr>
+
+      <h5>Treinar modelo</h5>
+      <form action="/train" method="post">
+        <div class="mb-3">
+          <label>Target (coluna)</label>
+          <input class="form-control" name="target" placeholder="nome da coluna alvo">
+        </div>
+        <div class="mb-3">
+          <label>Modelo</label>
+          <select class="form-select" name="model_choice">
+            <option>LinearRegression</option>
+            <option>RandomForest</option>
+            <option>KNN</option>
+            <option>LogisticRegression</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label>Test size (0-1)</label>
+          <input class="form-control" name="test_size" value="0.2">
+        </div>
+        <div class="mb-3">
+          <label>RandomForest: n_estimators</label>
+          <input class="form-control" name="n_estimators" value="100">
+        </div>
+        <div class="mb-3">
+          <label>RandomForest: max_depth (0=None)</label>
+          <input class="form-control" name="max_depth" value="0">
+        </div>
+        <div class="mb-3">
+          <label>KNN: n_neighbors</label>
+          <input class="form-control" name="n_neighbors" value="5">
+        </div>
+        <div class="mb-3">
+          <label>LogisticRegression: max_iter</label>
+          <input class="form-control" name="max_iter" value="100">
+        </div>
+        <button class="btn btn-success" type="submit">Treinar</button>
+      </form>
+
+    </div>
+    <div class="col-md-8">
+      <h4>Preview</h4>
+      {% if preview_html %}
+        <div class="mb-3">{{ preview_html | safe }}</div>
+      {% else %}
+        <p>Nenhum arquivo carregado.</p>
+      {% endif %}
+
+      <h4>Resumo</h4>
+      {% if summary_html %}
+        <div class="mb-3">{{ summary_html | safe }}</div>
+      {% endif %}
+
+      <h4>Plot de exemplo</h4>
+      {% if plot_div %}
+        <div>{{ plot_div | safe }}</div>
+      {% endif %}
+
+      {% if model_info %}
+        <h4>Último treino</h4>
+        <pre>{{ model_info.metrics | tojson(indent=2) }}</pre>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

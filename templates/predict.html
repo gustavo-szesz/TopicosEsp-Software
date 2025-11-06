@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block content %}
+  <h4>Predição (modelo treinado)</h4>
+  {% if not features %}
+    <p>Nenhum modelo disponível.</p>
+  {% else %}
+    <form method="post">
+      {% for f in features %}
+        <div class="mb-3">
+          <label>{{ f }}</label>
+          <input class="form-control" name="{{ f }}">
+        </div>
+      {% endfor %}
+      <button class="btn btn-primary" type="submit">Prever</button>
+    </form>
+  {% endif %}
+
+  {% if prediction is not none %}
+    <h5 class="mt-4">Resultado</h5>
+    <pre>{{ prediction }}</pre>
+  {% endif %}
+{% endblock %}
