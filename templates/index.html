@@ -1,78 +1,439 @@
-{% extends 'base.html' %}
-{% block content %}
-  <div class="row">
-    <div class="col-md-4">
-      <h5>Upload CSV</h5>
-      <form action="/upload" method="post" enctype="multipart/form-data">
-        <div class="mb-3">
-          <input class="form-control" type="file" name="csv_file" accept=".csv">
-        </div>
-        <button class="btn btn-primary" type="submit">Enviar</button>
-      </form>
+<!DOCTYPE html>
+<html lang="pt-br">
 
-      <hr>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airbnb Price Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        .card {
+            margin-bottom: 1rem;
+        }
 
-      <h5>Treinar modelo</h5>
-      <form action="/train" method="post">
-        <div class="mb-3">
-          <label>Target (coluna)</label>
-          <input class="form-control" name="target" placeholder="nome da coluna alvo">
+        .plot-container {
+            background: white;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid #dee2e6;
+        }
+
+        .insight-item {
+            padding: 0.5rem;
+            border-left: 4px solid #007bff;
+            margin-bottom: 0.5rem;
+            background: #f8f9fa;
+        }
+
+        .metric-card {
+            text-align: center;
+            padding: 1rem;
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .feature-help {
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+
+        .recommended-features {
+            background: #e7f3ff;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: #ff385c;">
+        <div class="container">
+            <img src="{{ url_for('static', filename='assets/logo_airbnb.png') }}" alt="Logo Airbnb"
+                style="height: 40px;">
+            <a class="navbar-brand" href="/">Analisador de preços do Airbnb</a>
         </div>
-        <div class="mb-3">
-          <label>Modelo</label>
-          <select class="form-select" name="model_choice">
-            <option>LinearRegression</option>
-            <option>RandomForest</option>
-            <option>KNN</option>
-            <option>LogisticRegression</option>
-          </select>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
-        <div class="mb-3">
-          <label>Test size (0-1)</label>
-          <input class="form-control" name="test_size" value="0.2">
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <!-- Upload Section -->
+        <div class="card">
+            <div class="card-header">
+                <h5>Upload do Dataset</h5>
+            </div>
+            <div class="card-body">
+                <form action="/upload" method="post" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <input class="form-control" type="file" name="csv_file" accept=".csv" required>
+                        <div class="form-text">Carregue o arquivo CSV do Airbnb para análise</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Carregar Dataset</button>
+                </form>
+            </div>
         </div>
-        <div class="mb-3">
-          <label>RandomForest: n_estimators</label>
-          <input class="form-control" name="n_estimators" value="100">
+
+        {% if has_data %}
+        <!-- Filters -->
+        <div class="card">
+            <div class="card-header">
+                <h5>Filtros</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="form-label">Bairro:</label>
+                            <select name="neighbourhood_filter" class="form-select">
+                                {% for neighbourhood in filter_options.neighbourhoods %}
+                                <option value="{{ neighbourhood }}" {% if
+                                    session.get('neighbourhood_filter')==neighbourhood %}selected{% endif %}>
+                                    {{ neighbourhood }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Tipo de Quarto:</label>
+                            <select name="room_type_filter" class="form-select">
+                                {% for room_type in filter_options.room_types %}
+                                <option value="{{ room_type }}" {% if session.get('room_type_filter')==room_type
+                                    %}selected{% endif %}>
+                                    {{ room_type }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary mt-3">Aplicar Filtros</button>
+                </form>
+            </div>
         </div>
-        <div class="mb-3">
-          <label>RandomForest: max_depth (0=None)</label>
-          <input class="form-control" name="max_depth" value="0">
+
+        <!-- Metrics -->
+        <div class="row mt-4">
+            {% if metrics.avg_price %}
+            <div class="col-md-3">
+                <div class="card metric-card">
+                    <div class="card-body">
+                        <h5 class="card-title">Preço Médio</h5>
+                        <div class="metric-value text-primary">{{ metrics.avg_price }}</div>
+                        <small class="text-muted">Valor médio das diárias</small>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            {% if metrics.median_price %}
+            <div class="col-md-3">
+                <div class="card metric-card">
+                    <div class="card-body">
+                        <h5 class="card-title">Preço Mediano</h5>
+                        <div class="metric-value text-info">{{ metrics.median_price }}</div>
+                        <small class="text-muted">Valor central das diárias</small>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            {% if metrics.avg_availability %}
+            <div class="col-md-3">
+                <div class="card metric-card">
+                    <div class="card-body">
+                        <h5 class="card-title">Disponibilidade</h5>
+                        <div class="metric-value text-success">{{ metrics.avg_availability }} dias</div>
+                        <small class="text-muted">Dias disponíveis/ano</small>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            {% if metrics.avg_rating %}
+            <div class="col-md-3">
+                <div class="card metric-card">
+                    <div class="card-body">
+                        <h5 class="card-title">Avaliação</h5>
+                        <div class="metric-value text-warning">{{ metrics.avg_rating }}</div>
+                        <small class="text-muted">Nota média dos hóspedes</small>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
-        <div class="mb-3">
-          <label>KNN: n_neighbors</label>
-          <input class="form-control" name="n_neighbors" value="5">
+
+        <!-- Plots -->
+        {% if plots %}
+        <div class="row mt-4">
+            {% for plot_key, plot_html in plots.items() %}
+            <div class="col-md-6">
+                <div class="plot-container">
+                    {{ plot_html|safe }}
+                </div>
+            </div>
+            {% endfor %}
         </div>
-        <div class="mb-3">
-          <label>LogisticRegression: max_iter</label>
-          <input class="form-control" name="max_iter" value="100">
+        {% endif %}
+
+        <!-- Insights -->
+        {% if insights %}
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5>Insights do Mercado</h5>
+            </div>
+            <div class="card-body">
+                {% for insight in insights %}
+                <div class="insight-item">{{ insight }}</div>
+                {% endfor %}
+            </div>
         </div>
-        <button class="btn btn-success" type="submit">Treinar</button>
-      </form>
+        {% endif %}
+
+        <!-- Machine Learning Section -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5>Predição de Preços com Machine Learning</h5>
+            </div>
+            <div class="card-body">
+                <!-- Model Training -->
+                <h6>Treinar Modelo de Predição</h6>
+                <form action="/train_model" method="post">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="form-label">Selecione as features (fatores que influenciam preços):</label>
+                            {% set feature_options = [
+                            'room type',
+                            'neighbourhood group',
+                            'minimum nights',
+                            'availability 365',
+                            'number of reviews',
+                            'review rate number',
+                            'reviews per month',
+                            'calculated host listings count',
+                            'Construction year'
+                            ] %}
+                            {% for feature in feature_options %}
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="features" value="{{ feature }}"
+                                    id="{{ feature }}">
+                                <label class="form-check-label" for="{{ feature }}">
+                                    {{ feature }}
+                                    <span class="feature-help">
+                                        {% if feature == 'room type' %}(Tipo de quarto){% endif %}
+                                        {% if feature == 'neighbourhood group' %}(Bairro){% endif %}
+                                        {% if feature == 'minimum nights' %}(Estadia mínima){% endif %}
+                                        {% if feature == 'availability 365' %}(Disponibilidade){% endif %}
+                                        {% if feature == 'review rate number' %}(Avaliação 1-5){% endif %}
+                                        {% if feature == 'calculated host listings count' %}(Experiência do host){%
+                                        endif %}
+                                    </span>
+                                </label>
+                            </div>
+                            {% endfor %}
+
+                            <div class="recommended-features">
+                                <strong>Recomendação:</strong><br>
+                                Selecione: <strong>room type</strong> + <strong>neighbourhood group</strong> +
+                                <strong>review rate number</strong><br>
+                                <small>Estas são as features que mais influenciam nos preços!</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Algoritmo de Machine Learning:</label>
+                                <select name="model_choice" class="form-select">
+                                    <option value="RandomForest">Random Forest</option>
+                                    <option value="LinearRegression">Linear Regression</option>
+                                    <option value="KNN">K-Nearest Neighbors</option>
+                                </select>
+                                <div class="form-text">
+                                    <strong>Random Forest</strong>: Melhor para dados complexos (recomendado)<br>
+                                    <strong>Linear Regression</strong>: Mais simples e interpretável<br>
+                                    <strong>KNN</strong>: Baseado em similaridade
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Proporção para teste:</label>
+                                <input type="number" name="test_size" class="form-control" value="0.2" step="0.1"
+                                    min="0.1" max="0.5">
+                                <div class="form-text">20% significa que 80% dos dados serão para treino e 20% para
+                                    teste</div>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-success mt-3">
+                        Treinar Modelo
+                    </button>
+                </form>
+
+                <!-- Prediction Section -->
+                {% if session.get('price_model') %}
+                <hr>
+                <h6>Fazer Predição de Preço</h6>
+                <p class="text-muted">Insira os valores para prever o preço de um novo imóvel:</p>
+
+                <form action="/predict" method="post">
+                    <div class="row">
+                        {% for feature in session['price_model']['features'] %}
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">
+                                <strong>{{ feature }}</strong>
+                                {% if feature == 'room type' and ml_options.room_types %}
+                                <select name="{{ feature }}" class="form-select" required>
+                                    <option value="">Selecione o tipo de quarto</option>
+                                    {% for room_type in ml_options.room_types %}
+                                    <option value="{{ room_type }}">{{ room_type }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% elif feature == 'neighbourhood group' and ml_options.neighbourhoods %}
+                                <select name="{{ feature }}" class="form-select" required>
+                                    <option value="">Selecione o bairro</option>
+                                    {% for neighbourhood in ml_options.neighbourhoods %}
+                                    <option value="{{ neighbourhood }}">{{ neighbourhood }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% else %}
+                                <input type="number" name="{{ feature }}" class="form-control" step="0.1" required
+                                    placeholder="Valor para {{ feature }}" {% if ml_options[feature] %}
+                                    min="{{ ml_options[feature].min }}" max="{{ ml_options[feature].max }}"
+                                    value="{{ ml_options[feature].mean|round(1) }}" {% endif %}>
+                                {% endif %}
+                            </label>
+                            <div class="form-text">
+                                {% if feature == 'room type' %}Tipo de acomodação{% endif %}
+                                {% if feature == 'neighbourhood group' %}Localização do imóvel{% endif %}
+                                {% if feature == 'minimum nights' %}Estadia mínima em dias{% endif %}
+                                {% if feature == 'availability 365' %}Dias disponíveis no ano (0-365){% endif %}
+                                {% if feature == 'review rate number' %}Avaliação (1-5){% endif %}
+                                {% if feature == 'number of reviews' %}Número total de avaliações{% endif %}
+                                {% if ml_options[feature] and feature not in ['room type', 'neighbourhood group'] %}
+                                Valores típicos: {{ ml_options[feature].min|round(1) }} a {{
+                                ml_options[feature].max|round(1) }}
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        Calcular Preço Previsto
+                    </button>
+                </form>
+
+                <!-- Model Metrics -->
+                <!-- {% if session.get('price_model') and session['price_model'].get('metrics') %}
+                <div class="mt-4">
+                    <h6>Desempenho do Modelo</h6>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">R² Score</h5>
+                                    {% set r2 = session['price_model']['metrics'].get('r2', 0) %}
+                                    <div class="metric-value 
+                        {% if r2 > 0.7 %}text-success
+                        {% elif r2 > 0.5 %}text-warning
+                        {% else %}text-danger{% endif %}">
+                                        {{ "%.3f"|format(r2) }}
+                                    </div>
+                                    <small class="text-muted">
+                                        {% if r2 > 0.7 %}Ótimo ajuste{% elif r2 > 0.5 %}Bom ajuste{% else %}Ajuste
+                                        precisa melhorar{% endif %}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">RMSE</h5>
+                                    <div class="metric-value text-info">
+                                        ${{ "%.2f"|format(session['price_model']['metrics'].get('rmse', 0)) }}
+                                    </div>
+                                    <small class="text-muted">Erro médio em dólares</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">MAE</h5>
+                                    <div class="metric-value text-info">
+                                        ${{ "%.2f"|format(session['price_model']['metrics'].get('mae', 0)) }}
+                                    </div>
+                                    <small class="text-muted">Erro absoluto médio</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %} -->
+
+                {% endif %}
+
+                <!-- Last Prediction Result -->
+                {% if session.get('last_prediction') %}
+                <div class="alert alert-success mt-3">
+                    <h6>Última Predição Realizada</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Preço Previsto:</strong><br>
+                            <span style="font-size: 2rem; font-weight: bold; color: #28a745;">
+                                ${{ "%.2f"|format(session['last_prediction']['price']) }}
+                            </span>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Valores Inseridos:</strong><br>
+                            {% for feature, value in session['last_prediction']['inputs'].items() %}
+                            <small>{{ feature }}: {{ value }}</small><br>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- No Model Trained Message -->
+                {% if not session.get('price_model') %}
+                <div class="alert alert-info mt-3">
+                    <h6>Como funciona a Predição?</h6>
+                    <p>O modelo de Machine Learning aprende com os dados do Airbnb para prever preços baseado em fatores
+                        como:</p>
+                    <ul>
+                        <li><strong>Localização</strong> (bairro) - Onde o imóvel está localizado</li>
+                        <li><strong>Tipo de propriedade</strong> - Quarto privado, apartamento inteiro, etc.</li>
+                        <li><strong>Avaliações</strong> - Reputação e qualidade do imóvel</li>
+                        <li><strong>Disponibilidade</strong> - Oferta e demanda no mercado</li>
+                    </ul>
+                    <p>Treine um modelo selecionando as features acima para começar a fazer predições!</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
 
     </div>
-    <div class="col-md-8">
-      <h4>Preview</h4>
-      {% if preview_html %}
-        <div class="mb-3">{{ preview_html | safe }}</div>
-      {% else %}
-        <p>Nenhum arquivo carregado.</p>
-      {% endif %}
 
-      <h4>Resumo</h4>
-      {% if summary_html %}
-        <div class="mb-3">{{ summary_html | safe }}</div>
-      {% endif %}
+    <footer class="mt-5 py-3 bg-light">
+        <div class="container text-center">
+            <small class="text-muted">
+                Analisador de preços do Airbnb &copy; 2024 - Análise de preços e predição usando Machine Learning
+            </small>
+        </div>
+    </footer>
 
-      <h4>Plot de exemplo</h4>
-      {% if plot_div %}
-        <div>{{ plot_div | safe }}</div>
-      {% endif %}
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
 
-      {% if model_info %}
-        <h4>Último treino</h4>
-        <pre>{{ model_info.metrics | tojson(indent=2) }}</pre>
-      {% endif %}
-    </div>
-  </div>
-{% endblock %}
+</html>
